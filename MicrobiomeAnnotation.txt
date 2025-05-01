@@ -1,0 +1,234 @@
+Microbiome Annotation and Code
+
+# In "microbiomesectionreport" folder
+conda activate qiime2
+
+# demux file creation
+qiime demux summarize \
+--i-data demux.qza \
+--o-visualization demux.qzv
+
+# trimming and truncating
+
+qiime dada2 denoise-paired \
+--i-demultiplexed-seqs demux.qza \
+--p-trunc-len-f 200 \
+--p-trim-left-f 0 \
+--p-trunc-len-r 230 \
+--p-trim-left-r 0 \
+--o-representative-sequences rep-seqs.qza \
+--o-table table.qza \
+--o-denoising-stats stats.qza
+
+# visualization of rep-seqs
+qiime feature-table summarize \
+--i-table table.qza \
+--o-visualization table.qzv \
+--m-sample-metadata-file metadata.txt
+qiime feature-table tabulate-seqs \
+--i-data rep-seqs.qza \
+--o-visualization rep-seqs.qzv
+
+wget \
+  -O "gg-13-8-99-515-806-nb-classifier.qza" \
+"https://data.qiime2.org/classifiers/sklearn-1.4.2/greengenes/gg-13-8-99-515-806-nb-classifier.qza"
+
+# code for identifying bacteria based on reference data
+
+qiime feature-classifier classify-sklearn \
+--i-classifier gg-13-8-99-515-806-nb-classifier.qza \
+--i-reads rep-seqs.qza \
+--o-classification taxonomy.qza
+
+# taxon visualization
+
+qiime metadata tabulate \
+--m-input-file taxonomy.qza \
+--o-visualization taxonomy.qzv
+
+# filter code to isolate target taxa
+
+qiime taxa filter-table \
+--i-table table.qza \
+--i-taxonomy taxonomy.qza \
+--p-include p__ \
+--p-exclude mitochondria,chloroplast \
+--o-filtered-table table-with-phyla-no-mitochondria-chloroplast.qza
+
+qiime taxa filter-table \
+--i-table table-with-phyla-no-mitochondria-chloroplast.qza \
+--i-taxonomy taxonomy.qza \
+--p-exclude "k__Archaea" \
+--o-filtered-table table-with-phyla-no-mitochondria-chloroplasts-archaea.qza
+
+qiime taxa filter-table \
+--i-table table-with-phyla-no-mitochondria-chloroplasts-archaea.qza \
+--i-taxonomy taxonomy.qza \
+--p-exclude "k__Eukaryota" \
+--o-filtered-table table-with-phyla-no-mitochondria-chloroplasts-archaea-eukaryota.qza
+
+qiime taxa filter-seqs \
+--i-sequences rep-seqs.qza \
+--i-taxonomy taxonomy.qza \
+--p-include p__ \
+--p-exclude mitochondria,chloroplast \
+--o-filtered-sequences rep-seqs-with-phyla-no-mitochondria-chloroplast.qza
+
+qiime taxa filter-seqs \
+--i-sequences rep-seqs-with-phyla-no-mitochondria-chloroplast.qza \
+--i-taxonomy taxonomy.qza \
+--p-exclude "k__Archaea" \
+--o-filtered-sequences rep-seqs-with-phyla-no-mitochondria-chloroplasts-archaea.qza
+
+qiime taxa filter-seqs \
+--i-sequences rep-seqs-with-phyla-no-mitochondria-chloroplasts-archaea.qza \
+--i-taxonomy taxonomy.qza \
+--p-exclude "k__Eukaryota" \
+--o-filtered-sequences rep-seqs-with-phyla-no-mitochondria-chloroplasts-archaea-eukaryota.qza
+
+# file renaming
+
+mv table-with-phyla-no-mitochondria-chloroplasts-archaea-eukaryota.qza filtered-table.qza
+
+mv rep-seqs-with-phyla-no-mitochondria-chloroplasts-archaea-eukaryota.qza filtered-rep-seqs.qza
+
+# alignment and phylogeny construction
+
+qiime phylogeny align-to-tree-mafft-fasttree \
+--i-sequences filtered-rep-seqs.qza \
+--o-alignment aligned-rep-seqs.qza \
+--o-masked-alignment masked-aligned-rep-seqs.qza \
+--o-tree unrooted-tree.qza \
+--o-rooted-tree rooted-tree.qza
+
+# code for summary visualization
+
+qiime feature-table summarize \
+--i-table filtered-table.qza \
+--o-visualization filtered-table.qzv \
+--m-sample-metadata-file metadata.txt
+
+# Code for calculating core diversity metrics based off my chosen depth of 936
+
+qiime diversity core-metrics-phylogenetic --i-phylogeny rooted-tree.qza --i-table filtered-table.qza --p-sampling-depth 936 --m-metadata-file metadata.txt --output-dir diversity-metrics-results
+
+# alpha diversity comparison code
+
+qiime diversity alpha-group-significance \
+--i-alpha-diversity diversity-metrics-results/shannon_vector.qza \
+--m-metadata-file metadata.txt \
+--o-visualization diversity-metrics-results/shannon-population-group-significance.qzv
+
+qiime diversity alpha-group-significance \
+--i-alpha-diversity diversity-metrics-results/shannon_vector.qza \
+--m-metadata-file metadata.txt \
+--o-visualization diversity-metrics-results/shannon-sex-group-significance.qzv
+
+qiime diversity alpha-group-significance \
+--i-alpha-diversity diversity-metrics-results/shannon_vector.qza \
+--m-metadata-file metadata.txt \
+--o-visualization diversity-metrics-results/shannon-flock-group-significance.qzv
+
+qiime diversity alpha-group-significance \
+--i-alpha-diversity diversity-metrics-results/observed_features_vector.qza \
+--m-metadata-file metadata.txt \
+--o-visualization diversity-metrics-results/observed-features-population-group-significance.qzv
+
+qiime diversity alpha-group-significance \
+--i-alpha-diversity diversity-metrics-results/observed_features_vector.qza \
+--m-metadata-file metadata.txt \
+--o-visualization diversity-metrics-results/observed-features-sex-group-significance.qzv
+
+qiime diversity alpha-group-significance \
+--i-alpha-diversity diversity-metrics-results/observed_features_vector.qza \
+--m-metadata-file metadata.txt \
+--o-visualization diversity-metrics-results/observed-features-flock-group-significance.qzv
+
+# pairwise stat comparisons of Bray-Curtis and Weighted Unifrac beta diversity
+
+qiime diversity beta-group-significance \
+  --i-distance-matrix diversity-metrics-results/bray_curtis_distance_matrix.qza \
+  --m-metadata-file metadata.txt \
+  --m-metadata-column flock \
+  --o-visualization diversity-metrics-results/bray-curtis-flock-significance.qzv \
+  --p-pairwise
+
+qiime diversity beta-group-significance \
+  --i-distance-matrix diversity-metrics-results/bray_curtis_distance_matrix.qza \
+  --m-metadata-file metadata.txt \
+  --m-metadata-column sex \
+  --o-visualization diversity-metrics-results/bray-curtis-sex-significance.qzv \
+  --p-pairwise
+
+qiime diversity beta-group-significance \
+  --i-distance-matrix diversity-metrics-results/bray_curtis_distance_matrix.qza \
+  --m-metadata-file metadata.txt \
+  --m-metadata-column population \
+  --o-visualization diversity-metrics-results/bray-curtis-population-significance.qzv \
+  --p-pairwise
+
+qiime diversity beta-group-significance \
+--i-distance-matrix diversity-metrics-results/weighted_unifrac_distance_matrix.qza \
+--m-metadata-file metadata.txt \
+--m-metadata-column population \
+--o-visualization diversity-metrics-results/weighted-unifrac-population-significance.qzv \
+--p-pairwise
+
+qiime diversity beta-group-significance \
+--i-distance-matrix diversity-metrics-results/weighted_unifrac_distance_matrix.qza \
+--m-metadata-file metadata.txt \
+--m-metadata-column flock \
+--o-visualization diversity-metrics-results/weighted-unifrac-flock-significance.qzv \
+--p-pairwise
+
+qiime diversity beta-group-significance \
+--i-distance-matrix diversity-metrics-results/weighted_unifrac_distance_matrix.qza \
+--m-metadata-file metadata.txt \
+--m-metadata-column sex \
+--o-visualization diversity-metrics-results/weighted-unifrac-sex-significance.qzv \
+--p-pairwise
+
+# abundance testing for shared features across microbial strains in the sample to determine shared similarities
+
+#flock
+qiime composition ancombc \
+  --i-table filtered-table.qza \
+  --m-metadata-file metadata.txt \
+  --p-formula 'flock' \
+  --o-differentials ancombc-flock.qza
+
+qiime composition da-barplot \
+  --i-data ancombc-flock.qza \
+  --p-significance-threshold 0.05 \
+  --o-visualization da-barplot-flock.qzv
+
+#population
+qiime composition ancombc \
+  --i-table filtered-table.qza \
+  --m-metadata-file metadata.txt \
+  --p-formula 'population' \
+  --o-differentials ancombc-population.qza
+
+qiime composition da-barplot \
+  --i-data ancombc-population.qza \
+  --p-significance-threshold 0.05 \
+  --o-visualization da-barplot-population.qzv
+
+#sex
+qiime composition ancombc \
+  --i-table filtered-table.qza \
+  --m-metadata-file metadata.txt \
+  --p-formula 'sex' \
+  --o-differentials ancombc-sex.qza
+
+qiime composition da-barplot \
+  --i-data ancombc-sex.qza \
+  --p-significance-threshold 0.05 \
+  --o-visualization da-barplot-sex.qzv
+
+
+
+
+
+
+
